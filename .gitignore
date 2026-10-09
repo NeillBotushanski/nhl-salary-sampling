@@ -1,0 +1,22 @@
+# Input data (not redistributed)
+data/*.xlsx
+data/*.xls
+data/*.csv
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+Rplots.pdf
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# OS
+.DS_Store

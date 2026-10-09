@@ -1,0 +1,858 @@
+\documentclass[12pt]{article}
+
+% -------------------------------------------------------
+% PACKAGES
+% -------------------------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,urlcolor=blue!60!black,citecolor=blue!60!black,
+  pdftitle={A Study Comparing NHL Player Salaries Across Positions and Geographic Regions Using Finite Population Sampling},
+  pdfauthor={Neill Botushanski}]{hyperref}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{xurl}
+
+% -------------------------------------------------------
+% HEADER / FOOTER
+% -------------------------------------------------------
+\setlength{\headheight}{14.5pt}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small MATH 3430 -- NHL Salary Analysis}
+\rhead{\small York University, 2026}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -------------------------------------------------------
+% SECTION FORMATTING
+% -------------------------------------------------------
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{\thesubsubsection}{1em}{}
+
+% -------------------------------------------------------
+% LISTINGS (R CODE)
+% -------------------------------------------------------
+\lstdefinestyle{Rcode}{
+  language=R,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{gray},
+  stringstyle=\color{green!50!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  rulecolor=\color{gray!40},
+  xleftmargin=2em,
+  framexleftmargin=2em,
+  aboveskip=6pt,
+  belowskip=6pt,
+  captionpos=b
+}
+
+% -------------------------------------------------------
+% CUSTOM MATH COMMANDS
+% -------------------------------------------------------
+\newcommand{\VarHat}{\widehat{\mathrm{Var}}}
+\newcommand{\SEHat}{\widehat{\mathrm{SE}}}
+
+% -------------------------------------------------------
+% DOCUMENT
+% -------------------------------------------------------
+\begin{document}
+
+% ==============================================================
+% TITLE PAGE
+% ==============================================================
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\LARGE\bfseries A Study Comparing NHL Player Salaries\\[0.5em]
+  Across Positions and Geographic Regions\\[0.5em]
+  Using Finite Population Sampling\par}
+  \vspace{1.5cm}
+  {\large MATH 3430 -- Sample Survey Design\par}
+  {\large York University\par}
+  \vspace{1cm}
+  \rule{0.5\textwidth}{0.4pt}\\[0.6cm]
+  {\large Neill Botushanski\par}
+  \vspace{0.3cm}
+  {\normalsize Group project, completed with two teammates\par}
+  \vspace{0.8cm}
+  \rule{0.5\textwidth}{0.4pt}\\[0.6cm]
+  {\large April 6, 2026\par}
+  \vfill
+  \begin{tcolorbox}[colback=gray!8, colframe=gray!50, width=0.85\textwidth]
+    \small\centering
+    This report presents a complete finite-population survey analysis of NHL player
+    salaries using SRSWOR, Stratified Sampling with Proportional Allocation, and
+    Stratified Sampling with Neyman Allocation. Strata are defined by playing position.
+    All computations were performed in \textsf{R} with \texttt{set.seed(123)}.
+  \end{tcolorbox}
+\end{titlepage}
+
+% ==============================================================
+% TABLE OF CONTENTS
+% ==============================================================
+\tableofcontents
+\newpage
+
+% ==============================================================
+\section{Abstract}
+% ==============================================================
+
+This study applies finite population sampling methods to estimate salary
+characteristics of National Hockey League (NHL) players.
+The population is $N = 787$ players, each with a recorded pre-tax annual salary and a
+tax-adjusted after-tax salary, along with playing position (Forward, Defenseman,
+Goaltender) and team country (Canada or United States).
+Three sampling designs are evaluated at a fixed total sample size $n = 120$:
+(1) Simple Random Sampling Without Replacement (SRSWOR),
+(2) Stratified Sampling with Proportional Allocation, and
+(3) Stratified Sampling with Neyman Allocation, where strata correspond to playing
+position.
+For each design and salary variable, we report the estimated population mean, its
+variance, standard error, and 95\% confidence interval, together with the estimated
+population total.
+Relative efficiency comparisons confirm that both stratified designs outperform SRSWOR,
+with Neyman allocation achieving the lowest variance.
+A key substantive finding is that tax adjustment substantially reverses the
+Canada-vs-United States salary ranking: U.S.\ teams have higher pre-tax average
+salaries for defensemen and goaltenders, but after taxes Canadian defensemen and
+forwards retain more, and the gap for goaltenders all but disappears.
+
+\noindent\textbf{Keywords:} SRSWOR, stratified sampling, Neyman allocation,
+proportional allocation, finite population correction, NHL salaries, relative efficiency.
+
+\newpage
+
+% ==============================================================
+\section{Introduction}
+\label{sec:intro}
+% ==============================================================
+
+Salary structures in professional sports leagues are shaped by player performance,
+market size, contract length, and the tax environment of each team's home jurisdiction.
+In the NHL, forwards, defensemen, and goaltenders fulfil fundamentally different
+on-ice roles; whether these positional differences translate into systematic salary gaps
+is an empirical question.
+Furthermore, because tax burdens differ between Canadian and U.S.\ jurisdictions, the
+pre-tax headline salary may misstate the real economic value of a contract.
+Without adjusting for taxes, a naive comparison of nominal salaries could lead to
+incorrect conclusions about which players are better compensated.
+
+This project applies finite population sampling theory to address these questions
+rigorously.
+The 787-player dataset is treated as a finite population.
+Rather than analysing the full population directly, we draw probability samples and
+use them to construct estimators, thereby demonstrating how estimator precision depends
+on the chosen sampling design.
+This is precisely the setting of finite population inference: the population is fixed
+and finite, randomness enters only through the sampling mechanism, and the goal is
+to compare designs on the basis of the variance they induce.
+
+\subsection*{Research Objectives}
+
+\begin{enumerate}[nosep]
+  \item Estimate the population mean NHL pre-tax salary $\mu_{\mathrm{pre}}$ and
+        population mean after-tax salary $\mu_{\mathrm{after}}$, together with the
+        corresponding population totals.
+  \item Quantify estimator precision under three designs: SRSWOR, proportional
+        stratified, and Neyman stratified sampling.
+  \item Compare designs via relative efficiency (RE).
+  \item Examine whether mean salary differs across the three playing positions.
+  \item Assess how tax adjustment alters the Canada vs.\ United States salary
+        comparison.
+\end{enumerate}
+
+\newpage
+
+% ==============================================================
+\section{Population and Data Description}
+\label{sec:data}
+% ==============================================================
+
+\subsection{Population Frame}
+
+The sampling frame is the complete set of $N = 787$ NHL players retained after the
+following cleaning steps:
+\begin{itemize}[nosep]
+  \item Any row with a missing value in Team, Country, Player, Position, SalaryPreTax,
+        or SalaryAfterTax was removed.
+  \item The position code \texttt{C} (centre) was recoded to \texttt{F} (forward),
+        yielding three mutually exclusive and exhaustive position categories.
+  \item Rows with Position outside $\{F, D, G\}$ or Country outside $\{C, U\}$ were
+        removed.
+\end{itemize}
+
+A derived variable $T_i = Y_i^{\mathrm{pre}} - Y_i^{\mathrm{after}}$ captures the
+dollar amount lost to taxes for player $i$.
+
+\subsection{Population Composition}
+
+\begin{table}[H]
+\centering
+\caption{Population counts by playing position ($N = 787$)}
+\label{tab:pop}
+\begin{tabular}{lrr}
+\toprule
+Position & Count ($N_h$) & Proportion ($W_h = N_h/N$) \\
+\midrule
+Defenseman (D) & 269 & 0.3418 \\
+Forward (F)    & 448 & 0.5693 \\
+Goaltender (G) &  70 & 0.0889 \\
+\midrule
+Total          & 787 & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Population counts by country}
+\label{tab:pop_country}
+\begin{tabular}{lrr}
+\toprule
+Country           & Count & Proportion \\
+\midrule
+Canada (C)        & 164   & 0.2084 \\
+United States (U) & 623   & 0.7916 \\
+\midrule
+Total             & 787   & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Population-Level Salary Summaries}
+
+Because the full dataset is available, the true population means serve as benchmarks
+against which the sample estimates can be evaluated.
+
+\begin{table}[H]
+\centering
+\caption{Population mean pre-tax salary by position and region}
+\label{tab:pop_pretax}
+\begin{tabular}{llrrr}
+\toprule
+Position & Region & Count & Mean Pre-Tax (\$) & SD (\$) \\
+\midrule
+D & Canada        &  52 & 3{,}545{,}124 & 2{,}757{,}696 \\
+D & United States & 217 & 3{,}698{,}438 & 2{,}899{,}817 \\
+F & Canada        &  97 & 3{,}805{,}874 & 2{,}887{,}633 \\
+F & United States & 351 & 3{,}585{,}417 & 2{,}796{,}670 \\
+G & Canada        &  15 & 3{,}195{,}444 & 2{,}658{,}782 \\
+G & United States &  55 & 3{,}826{,}136 & 2{,}843{,}115 \\
+\midrule
+Overall           & & 787 & 3{,}650{,}480 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Population mean after-tax salary by position and region}
+\label{tab:pop_aftertax}
+\begin{tabular}{llrrr}
+\toprule
+Position & Region & Count & Mean After-Tax (\$) & SD (\$) \\
+\midrule
+D & Canada        &  52 & 1{,}823{,}065 & 1{,}415{,}306 \\
+D & United States & 217 & 1{,}595{,}217 & 1{,}287{,}632 \\
+F & Canada        &  97 & 1{,}963{,}960 & 1{,}510{,}241 \\
+F & United States & 351 & 1{,}532{,}326 & 1{,}196{,}062 \\
+G & Canada        &  15 & 1{,}657{,}259 & 1{,}381{,}689 \\
+G & United States &  55 & 1{,}677{,}503 & 1{,}297{,}076 \\
+\midrule
+Overall           & & 787 & 1{,}634{,}604 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Population mean tax lost (\$) by position and region}
+\label{tab:pop_taxlost}
+\begin{tabular}{llrr}
+\toprule
+Position & Region & Count & Mean Tax Lost (\$) \\
+\midrule
+D & Canada        &  52 & 1{,}722{,}059 \\
+D & United States & 217 & 2{,}103{,}220 \\
+F & Canada        &  97 & 1{,}841{,}914 \\
+F & United States & 351 & 2{,}053{,}091 \\
+G & Canada        &  15 & 1{,}538{,}186 \\
+G & United States &  55 & 2{,}148{,}633 \\
+\midrule
+Overall           & & 787 & 2{,}015{,}876 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent The overall population mean pre-tax salary is \$3{,}650{,}480 and the mean
+after-tax salary is \$1{,}634{,}604, implying that the average player loses roughly
+\$2{,}015{,}876 -- approximately 55\% of gross salary -- to taxes.
+Crucially, the regional ranking flips after taxes: for forwards and defensemen,
+Canadian players retain \emph{more} after-tax income despite having pre-tax salaries
+that are comparable to, or in some cases lower than, those of their U.S.\ counterparts.
+
+\newpage
+
+% ==============================================================
+\section{Sampling Design and Methods}
+\label{sec:methods}
+% ==============================================================
+
+\subsection{Notation}
+
+Let $U = \{1, 2, \ldots, N\}$ be the population of $N = 787$ units and $s$ a
+probability sample of size $n = 120$.
+The overall sampling fraction is
+\[
+  f = \frac{n}{N} = \frac{120}{787} \approx 0.1525.
+\]
+For stratified designs we index strata by $h \in \{D, F, G\}$, with $N_h$ the stratum
+population size, $n_h$ the stratum sample size, $W_h = N_h / N$ the stratum weight,
+and $f_h = n_h / N_h$ the stratum sampling fraction.
+Let $\bar{Y}_h$ denote the true stratum mean and $S_h^2$ the true stratum variance,
+with sample analogues $\bar{y}_h$ and $s_h^2$.
+
+\subsection{Simple Random Sampling Without Replacement (SRSWOR)}
+\label{sec:srs}
+
+Under SRSWOR every subset of size $n$ from $U$ has equal probability of selection.
+The estimator of the population mean is the sample mean:
+\[
+  \hat{\bar{Y}}_{\mathrm{SRS}} = \bar{y} = \frac{1}{n}\sum_{i \in s} y_i.
+\]
+Its estimated variance incorporates the finite population correction (FPC):
+\[
+  \VarHat\!\left(\hat{\bar{Y}}_{\mathrm{SRS}}\right)
+  = \underbrace{\left(1 - \frac{n}{N}\right)}_{\text{FPC}} \frac{s^2}{n},
+  \quad \text{where } s^2 = \frac{1}{n-1}\sum_{i \in s}(y_i - \bar{y})^2.
+\]
+The FPC reduces the variance below the with-replacement formula by a factor
+$(1-f)$; here $1 - f \approx 0.8475$.
+
+The estimated population total and its standard error are:
+\[
+  \hat{T}_{\mathrm{SRS}} = N\,\hat{\bar{Y}}_{\mathrm{SRS}},
+  \qquad
+  \SEHat\!\left(\hat{T}_{\mathrm{SRS}}\right) = N\,\SEHat\!\left(\hat{\bar{Y}}_{\mathrm{SRS}}\right).
+\]
+
+A 95\% confidence interval for $\bar{Y}$ is constructed as:
+\[
+  \hat{\bar{Y}}_{\mathrm{SRS}}
+  \;\pm\; 1.96\;\SEHat\!\left(\hat{\bar{Y}}_{\mathrm{SRS}}\right).
+\]
+
+\subsection{Stratified Sampling with Proportional Allocation}
+\label{sec:prop}
+
+The population is partitioned into $H = 3$ strata by playing position.
+Under proportional allocation the stratum sample sizes are
+\[
+  n_h^{\mathrm{prop}} = n \cdot W_h = n \cdot \frac{N_h}{N}, \qquad h \in \{D,F,G\}.
+\]
+Since $n_h^{\mathrm{prop}}$ is generally non-integer, the \emph{largest-remainder
+method} is applied: assign $\lfloor n_h^{\mathrm{prop}} \rfloor$ to each stratum,
+then distribute the remaining $n - \sum_h \lfloor n_h^{\mathrm{prop}} \rfloor$
+units one by one to the strata with the largest fractional remainders, subject to
+$n_h \leq N_h$. The resulting integer allocation is shown in Table~\ref{tab:prop_alloc}.
+
+\begin{table}[H]
+\centering
+\caption{Proportional allocation by position}
+\label{tab:prop_alloc}
+\begin{tabular}{lrrrr}
+\toprule
+Position & $N_h$ & $W_h$ & $n_h^{\text{raw}} = nW_h$ & $n_h$ (integer) \\
+\midrule
+D & 269 & 0.3418 & 41.02 & 41 \\
+F & 448 & 0.5693 & 68.32 & 68 \\
+G &  70 & 0.0889 & 10.67 & 11 \\
+\midrule
+Total & 787 & 1.0000 & 120.00 & 120 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Within each stratum an independent SRSWOR of size $n_h$ is drawn.
+The stratified estimator of the population mean is:
+\[
+  \hat{\bar{Y}}_{\mathrm{st}} = \sum_{h=1}^{H} W_h\,\bar{y}_h.
+\]
+Its estimated variance is:
+\[
+  \VarHat\!\left(\hat{\bar{Y}}_{\mathrm{st}}\right)
+  = \sum_{h=1}^{H} W_h^2 \left(1 - \frac{n_h}{N_h}\right)\frac{s_h^2}{n_h}.
+\]
+Each term contains a stratum-level FPC $(1 - n_h/N_h)$ and is weighted by $W_h^2$.
+The estimated population total is $\hat{T}_{\mathrm{st}} = N\,\hat{\bar{Y}}_{\mathrm{st}}$.
+
+\subsection{Stratified Sampling with Neyman Allocation}
+\label{sec:neyman}
+
+Neyman (optimal) allocation minimises $\mathrm{Var}(\hat{\bar{Y}}_{\mathrm{st}})$
+for a fixed total sample size $n$:
+\[
+  n_h^{\mathrm{Ney}} = n \cdot \frac{N_h S_h}{\displaystyle\sum_{k=1}^{H} N_k S_k}.
+\]
+Strata with larger population size $N_h$ or greater variability $S_h$ receive more
+sample units. Because the true $S_h$ are unknown in practice, we substitute the
+population standard deviations computed from the full dataset (oracle allocation).
+Since $S_h$ differs between pre-tax and after-tax salary, separate Neyman allocations
+are computed for each variable.
+
+\subsubsection*{Neyman Allocation for Pre-Tax Salary}
+
+Population stratum standard deviations:
+$S_D = 2{,}868{,}489$, $S_F = 2{,}814{,}813$, $S_G = 2{,}797{,}913$.
+
+\begin{align*}
+  \sum_h N_h S_h
+  &= (269)(2{,}868{,}489) + (448)(2{,}814{,}813) + (70)(2{,}797{,}913) \\
+  &= 771{,}623{,}582 + 1{,}261{,}036{,}342 + 195{,}853{,}919 \\
+  &= 2{,}228{,}513{,}843.
+\end{align*}
+(The products are computed from the unrounded $S_h$, so they differ slightly from
+the product of the rounded values shown.)
+\begin{align*}
+  n_D^{\text{raw}} &= 120 \times \frac{771{,}623{,}582}{2{,}228{,}513{,}843} = 41.550, \\[4pt]
+  n_F^{\text{raw}} &= 120 \times \frac{1{,}261{,}036{,}342}{2{,}228{,}513{,}843} = 67.904, \\[4pt]
+  n_G^{\text{raw}} &= 120 \times \frac{195{,}853{,}919}{2{,}228{,}513{,}843} = 10.546.
+\end{align*}
+The integer parts (41, 67, 10) sum to 118, so the largest-remainder method assigns the
+two remaining units to F and D, giving $n_D = 42$, $n_F = 68$, $n_G = 10$.
+
+\begin{table}[H]
+\centering
+\caption{Neyman allocation for pre-tax salary}
+\label{tab:neyman_pre}
+\begin{tabular}{lrrrrrr}
+\toprule
+Position & $N_h$ & $S_h$ & $W_h$ & $N_h S_h$ & $n_h^{\text{raw}}$ & $n_h$ \\
+\midrule
+D & 269 & 2{,}868{,}489 & 0.342 & 771{,}623{,}582   & 41.550 & 42 \\
+F & 448 & 2{,}814{,}813 & 0.569 & 1{,}261{,}036{,}342 & 67.904 & 68 \\
+G &  70 & 2{,}797{,}913 & 0.089 & 195{,}853{,}919   & 10.546 & 10 \\
+\midrule
+Total & 787 & & & 2{,}228{,}513{,}843 & 120.000 & 120 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection*{Neyman Allocation for After-Tax Salary}
+
+Population stratum standard deviations:
+$S_D = 1{,}313{,}623$, $S_F = 1{,}281{,}268$, $S_G = 1{,}305{,}405$.
+
+\begin{align*}
+  \sum_h N_h S_h
+  &= (269)(1{,}313{,}623) + (448)(1{,}281{,}268) + (70)(1{,}305{,}405) \\
+  &= 353{,}364{,}587 + 574{,}008{,}064 + 91{,}378{,}350 \\
+  &= 1{,}018{,}751{,}001.
+\end{align*}
+\begin{align*}
+  n_D^{\text{raw}} &= 120 \times \frac{353{,}364{,}587}{1{,}018{,}751{,}001} = 41.623, \\[4pt]
+  n_F^{\text{raw}} &= 120 \times \frac{574{,}008{,}064}{1{,}018{,}751{,}001} = 67.613, \\[4pt]
+  n_G^{\text{raw}} &= 120 \times \frac{91{,}378{,}350}{1{,}018{,}751{,}001} = 10.764.
+\end{align*}
+The integer parts (41, 67, 10) again sum to 118; the two remaining units go to G and D,
+giving $n_D = 42$, $n_F = 67$, $n_G = 11$.
+
+\begin{table}[H]
+\centering
+\caption{Neyman allocation for after-tax salary}
+\label{tab:neyman_after}
+\begin{tabular}{lrrrrrr}
+\toprule
+Position & $N_h$ & $S_h$ & $W_h$ & $N_h S_h$ & $n_h^{\text{raw}}$ & $n_h$ \\
+\midrule
+D & 269 & 1{,}313{,}623 & 0.342 & 353{,}364{,}587   & 41.623 & 42 \\
+F & 448 & 1{,}281{,}268 & 0.569 & 574{,}008{,}064   & 67.613 & 67 \\
+G &  70 & 1{,}305{,}405 & 0.089 &  91{,}378{,}350   & 10.764 & 11 \\
+\midrule
+Total & 787 & & & 1{,}018{,}751{,}001 & 120.000 & 120 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Relative Efficiency}
+\label{sec:re}
+
+The relative efficiency of design $A$ relative to design $B$ is defined as:
+\[
+  \mathrm{RE}(A \text{ vs.\ } B)
+  = \frac{\VarHat\!\left(\hat{\bar{Y}}_{B}\right)}{\VarHat\!\left(\hat{\bar{Y}}_{A}\right)}.
+\]
+A value $\mathrm{RE} > 1$ means design $A$ has smaller estimated variance (is more
+efficient) than design $B$.
+
+\newpage
+
+% ==============================================================
+\section{Results}
+\label{sec:results}
+% ==============================================================
+
+\subsection{Pre-Tax Salary: SRSWOR}
+
+A SRSWOR of $n = 120$ was drawn with \texttt{set.seed(123)}.
+
+\[
+  \hat{\bar{Y}}_{\mathrm{SRS}}^{\mathrm{pre}} = \$4{,}170{,}330,
+  \qquad
+  s^2 = 8{,}925{,}643{,}801{,}435.
+\]
+
+Estimated variance with FPC:
+\[
+  \VarHat\!\left(\hat{\bar{Y}}_{\mathrm{SRS}}^{\mathrm{pre}}\right)
+  = \left(1 - \frac{120}{787}\right)\frac{8{,}925{,}643{,}801{,}435}{120}
+  = (0.8475)(74{,}380{,}365{,}012)
+  = 63{,}039{,}013{,}295.
+\]
+
+\[
+  \SEHat = \sqrt{63{,}039{,}013{,}295} = \$251{,}076,
+  \qquad
+  \text{95\% CI: } (\$3{,}678{,}222,\ \$4{,}662{,}439).
+\]
+
+\[
+  \hat{T}_{\mathrm{SRS}}^{\mathrm{pre}} = 787 \times 4{,}170{,}330 = \$3{,}282{,}049{,}985,
+  \qquad
+  \SEHat(\hat{T}) = 787 \times 251{,}076 = \$197{,}596{,}812.
+\]
+
+\subsection{Pre-Tax Salary: Stratified Proportional}
+
+\[
+  \hat{\bar{Y}}_{\mathrm{st,prop}}^{\mathrm{pre}} = \$3{,}362{,}231,
+  \qquad
+  \VarHat = 54{,}651{,}670{,}893,
+  \qquad
+  \SEHat = \$233{,}777.
+\]
+\[
+  \text{95\% CI: } (\$2{,}904{,}028,\ \$3{,}820{,}434).
+\]
+\[
+  \hat{T}_{\mathrm{st,prop}}^{\mathrm{pre}} = \$2{,}646{,}076{,}038,
+  \qquad
+  \SEHat(\hat{T}) = \$183{,}982{,}474.
+\]
+
+\subsection{Pre-Tax Salary: Stratified Neyman}
+
+\[
+  \hat{\bar{Y}}_{\mathrm{st,Ney}}^{\mathrm{pre}} = \$3{,}349{,}263,
+  \qquad
+  \VarHat = 53{,}488{,}449{,}024,
+  \qquad
+  \SEHat = \$231{,}276.
+\]
+\[
+  \text{95\% CI: } (\$2{,}895{,}962,\ \$3{,}802{,}563).
+\]
+\[
+  \hat{T}_{\mathrm{st,Ney}}^{\mathrm{pre}} = \$2{,}635{,}869{,}698,
+  \qquad
+  \SEHat(\hat{T}) = \$182{,}013{,}975.
+\]
+
+\subsection{Pre-Tax Salary Summary}
+
+\begin{table}[H]
+\centering
+\caption{Pre-tax salary estimator comparison}
+\label{tab:pre_compare}
+\begin{tabular}{lrrrrr}
+\toprule
+Method & $\hat{\bar{Y}}$ (\$) & SE (\$) & CI Lower (\$) & CI Upper (\$) & $\hat{T}$ (\$) \\
+\midrule
+SRSWOR       & 4{,}170{,}330 & 251{,}076 & 3{,}678{,}222 & 4{,}662{,}439 & 3{,}282{,}049{,}985 \\
+Proportional & 3{,}362{,}231 & 233{,}777 & 2{,}904{,}028 & 3{,}820{,}434 & 2{,}646{,}076{,}038 \\
+Neyman       & 3{,}349{,}263 & 231{,}276 & 2{,}895{,}962 & 3{,}802{,}563 & 2{,}635{,}869{,}698 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Relative efficiencies for pre-tax salary:
+\[
+  \mathrm{RE}(\text{Prop vs SRS}) = \frac{63{,}039{,}013{,}295}{54{,}651{,}670{,}893} = 1.1535,
+\]
+\[
+  \mathrm{RE}(\text{Neyman vs SRS}) = \frac{63{,}039{,}013{,}295}{53{,}488{,}449{,}024} = 1.1786,
+\]
+\[
+  \mathrm{RE}(\text{Neyman vs Prop}) = \frac{54{,}651{,}670{,}893}{53{,}488{,}449{,}024} = 1.0217.
+\]
+
+The variance reduction implied by a relative efficiency is $1 - 1/\mathrm{RE}$.
+Proportional allocation therefore achieves a 13.3\% variance reduction over SRSWOR and
+Neyman allocation a 15.2\% reduction, an incremental 2.1\% beyond proportional.
+
+\subsection{After-Tax Salary: SRSWOR}
+
+The same SRSWOR sample is used for after-tax salary:
+\[
+  \hat{\bar{Y}}_{\mathrm{SRS}}^{\mathrm{after}} = \$1{,}899{,}015,
+  \qquad
+  s^2 = 1{,}993{,}664{,}126{,}684.
+\]
+\[
+  \VarHat\!\left(\hat{\bar{Y}}_{\mathrm{SRS}}^{\mathrm{after}}\right)
+  = (0.8475)\frac{1{,}993{,}664{,}126{,}684}{120}
+  = 14{,}080{,}622{,}326,
+  \qquad
+  \SEHat = \$118{,}662.
+\]
+\[
+  \text{95\% CI: } (\$1{,}666{,}438,\ \$2{,}131{,}592).
+\]
+\[
+  \hat{T}_{\mathrm{SRS}}^{\mathrm{after}} = \$1{,}494{,}525{,}067,
+  \qquad
+  \SEHat(\hat{T}) = \$93{,}386{,}835.
+\]
+
+\subsection{After-Tax Salary: Stratified Proportional}
+
+\[
+  \hat{\bar{Y}}_{\mathrm{st,prop}}^{\mathrm{after}} = \$1{,}540{,}873,
+  \qquad
+  \VarHat = 12{,}518{,}558{,}006,
+  \qquad
+  \SEHat = \$111{,}886.
+\]
+\[
+  \text{95\% CI: } (\$1{,}321{,}575,\ \$1{,}760{,}170).
+\]
+\[
+  \hat{T}_{\mathrm{st,prop}}^{\mathrm{after}} = \$1{,}212{,}666{,}704,
+  \qquad
+  \SEHat(\hat{T}) = \$88{,}054{,}567.
+\]
+
+\subsection{After-Tax Salary: Stratified Neyman}
+
+\[
+  \hat{\bar{Y}}_{\mathrm{st,Ney}}^{\mathrm{after}} = \$1{,}535{,}275,
+  \qquad
+  \VarHat = 12{,}296{,}975{,}180,
+  \qquad
+  \SEHat = \$110{,}892.
+\]
+\[
+  \text{95\% CI: } (\$1{,}317{,}927,\ \$1{,}752{,}623).
+\]
+\[
+  \hat{T}_{\mathrm{st,Ney}}^{\mathrm{after}} = \$1{,}208{,}261{,}463,
+  \qquad
+  \SEHat(\hat{T}) = \$87{,}271{,}789.
+\]
+
+\subsection{After-Tax Salary Summary}
+
+\begin{table}[H]
+\centering
+\caption{After-tax salary estimator comparison}
+\label{tab:after_compare}
+\begin{tabular}{lrrrrr}
+\toprule
+Method & $\hat{\bar{Y}}$ (\$) & SE (\$) & CI Lower (\$) & CI Upper (\$) & $\hat{T}$ (\$) \\
+\midrule
+SRSWOR       & 1{,}899{,}015 & 118{,}662 & 1{,}666{,}438 & 2{,}131{,}592 & 1{,}494{,}525{,}067 \\
+Proportional & 1{,}540{,}873 & 111{,}886 & 1{,}321{,}575 & 1{,}760{,}170 & 1{,}212{,}666{,}704 \\
+Neyman       & 1{,}535{,}275 & 110{,}892 & 1{,}317{,}927 & 1{,}752{,}623 & 1{,}208{,}261{,}463 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Relative efficiencies for after-tax salary:
+\[
+  \mathrm{RE}(\text{Prop vs SRS}) = \frac{14{,}080{,}622{,}326}{12{,}518{,}558{,}006} = 1.1248,
+\]
+\[
+  \mathrm{RE}(\text{Neyman vs SRS}) = \frac{14{,}080{,}622{,}326}{12{,}296{,}975{,}180} = 1.1450,
+\]
+\[
+  \mathrm{RE}(\text{Neyman vs Prop}) = \frac{12{,}518{,}558{,}006}{12{,}296{,}975{,}180} = 1.0180.
+\]
+
+\subsection{Consolidated Efficiency Comparison}
+
+\begin{table}[H]
+\centering
+\caption{Relative efficiency summary for both salary variables}
+\label{tab:re_summary}
+\begin{tabular}{lrr}
+\toprule
+Comparison & Pre-Tax RE & After-Tax RE \\
+\midrule
+Proportional vs.\ SRSWOR & 1.1535 & 1.1248 \\
+Neyman vs.\ SRSWOR       & 1.1786 & 1.1450 \\
+Neyman vs.\ Proportional & 1.0217 & 1.0180 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Across both salary variables, stratified sampling consistently improves
+precision.
+The incremental gain from Neyman over proportional allocation is small (roughly 2\%
+variance reduction) because the three position strata have nearly identical
+within-stratum standard deviations.
+When all $S_h$ are equal, Neyman allocation reduces exactly to proportional allocation,
+and no further gains are possible from optimal within-stratum weighting.
+
+\subsection{Interpretation of Substantive Results}
+
+\subsubsection*{Salary distributions}
+
+Both pre-tax and after-tax salary distributions are strongly right-skewed.
+The majority of players earn near the league minimum (\$775{,}000), while a small
+number of elite players command contracts up to \$17{,}000{,}000.
+This concentration of extreme values drives the large within-stratum standard
+deviations (around \$2{,}800{,}000 for pre-tax across all positions) and limits the
+precision gains achievable through stratification by position alone.
+
+\subsubsection*{Position comparisons}
+
+Mean pre-tax salaries are remarkably similar across positions:
+\$3{,}668{,}801 (D), \$3{,}633{,}150 (F), \$3{,}690{,}988 (G).
+The same pattern holds for after-tax salaries.
+Playing position is therefore a weak predictor of individual salary relative to
+within-position variability, which explains the modest efficiency gains from
+stratification.
+
+\subsubsection*{Regional comparison and the tax reversal}
+
+On a pre-tax basis, U.S.\ teams pay more than Canadian teams for defensemen
+(\$3{,}698{,}438 vs.\ \$3{,}545{,}124) and goaltenders
+(\$3{,}826{,}136 vs.\ \$3{,}195{,}444),
+while Canadian teams pay more for forwards
+(\$3{,}805{,}874 vs.\ \$3{,}585{,}417).
+After taxes this picture changes substantially:
+Canadian defensemen retain \$1{,}823{,}065 vs.\ \$1{,}595{,}217 for U.S.\ defensemen,
+and Canadian forwards retain \$1{,}963{,}960 vs.\ \$1{,}532{,}326 for U.S.\ forwards.
+Only for goaltenders does the difference effectively vanish
+(\$1{,}657{,}259 Canada vs.\ \$1{,}677{,}503 United States).
+
+The mean tax lost by U.S.\ players (\$2{,}103{,}220 D, \$2{,}053{,}091 F,
+\$2{,}148{,}633 G) consistently exceeds that of Canadian players
+(\$1{,}722{,}059 D, \$1{,}841{,}914 F, \$1{,}538{,}186 G),
+confirming that higher U.S.\ nominal salaries are partly or fully offset by higher
+tax burdens.
+
+\newpage
+
+% ==============================================================
+\section{Conclusions and Discussion}
+\label{sec:conclusions}
+% ==============================================================
+
+\subsection{Summary of Main Findings}
+
+This study estimated NHL salary characteristics from a probability sample of $n = 120$
+players drawn from a finite population of $N = 787$.
+
+The true population mean pre-tax salary is \$3{,}650{,}480 and the true population
+mean after-tax salary is \$1{,}634{,}604.
+Both stratified estimators (proportional and Neyman) fell closer to these true values
+than the SRSWOR estimator, which was inflated by high-salary outliers captured in the
+particular SRSWOR draw.
+This illustrates the importance of design: a more precise design is less susceptible
+to chance imbalance in how outliers are represented.
+
+Stratified sampling with positions as strata improves precision over SRSWOR in all
+cases.
+For pre-tax salary, proportional allocation reduces variance by 13.3\% and Neyman
+allocation by 15.2\%. For after-tax salary, the figures are 11.1\% and 12.7\%.
+The additional gain from Neyman over proportional is approximately 2\% in both cases,
+reflecting near-uniform within-stratum variability across positions.
+
+The most substantive finding is the regional tax reversal.
+Pre-tax salary comparisons suggest U.S.\ teams offer higher compensation for
+defensemen and goaltenders, yet after-tax salary comparisons show that Canadian
+defensemen and forwards actually retain more income.
+Any analysis of NHL compensation that relies solely on pre-tax salaries therefore
+risks misleading conclusions about the financial incentives for players choosing
+between Canadian and U.S.\ teams.
+
+\subsection{Limitations}
+
+\begin{enumerate}
+  \item \textbf{Right-skewed distributions.} The high within-stratum variance driven
+        by extreme salaries limits the efficiency gains from stratification by position.
+        Stratifying on contract tier, age, or years of experience might produce more
+        homogeneous strata and larger variance reductions.
+
+  \item \textbf{Cross-sectional scope.} The dataset reflects a single season.
+        Collective bargaining agreements and roster changes evolve over time; the
+        findings may not generalise to other seasons.
+
+  \item \textbf{Tax simplification.} The after-tax salary variable is based on
+        simplified tax calculations and does not capture the full complexity of athlete
+        taxation, including state or provincial rates, endorsement income, deferred
+        compensation, or signing bonuses.
+
+  \item \textbf{Oracle Neyman allocation.} Using full-population standard deviations
+        to set Neyman allocation is an oracle procedure unavailable in a real survey
+        setting, where $S_h$ must be estimated from a pilot sample or auxiliary data.
+        This introduces additional uncertainty not quantified in the present analysis.
+
+  \item \textbf{Single sample realisation.} All results are based on a single sample
+        draw per design. A simulation study repeating the sampling many times would
+        provide empirical confirmation of the relative efficiency figures.
+\end{enumerate}
+
+\newpage
+
+% ==============================================================
+\section*{References}
+\addcontentsline{toc}{section}{References}
+% ==============================================================
+
+\begin{enumerate}
+  \item Cochran, W.~G. (1977). \textit{Sampling Techniques} (3rd ed.). John Wiley \& Sons.
+  \item Thompson, S.~K. (2012). \textit{Sampling} (3rd ed.). John Wiley \& Sons.
+  \item Spotrac NHL Contract Average Dataset. Available at:
+        \url{https://www.spotrac.com/nhl/rankings/player/_/year/2025/sort/contract_average}.
+  \item The Commute Sports. NHL Salary Analysis (2019). Available at:
+        \url{https://thecommutesports.com/2019/09/07/nhl-salary-analysis/}.
+  \item R Core Team (2024). \textit{R: A Language and Environment for Statistical
+        Computing}. R Foundation for Statistical Computing, Vienna, Austria.
+        \url{https://www.R-project.org/}.
+\end{enumerate}
+
+\newpage
+
+% ==============================================================
+\appendix
+\section*{Appendix A: Complete Annotated R Code}
+\addcontentsline{toc}{section}{Appendix A: Complete Annotated R Code}
+% ==============================================================
+
+% The listing is read straight from the script so the two cannot drift apart.
+\lstinputlisting[style=Rcode, caption={Complete R script for NHL salary analysis (MATH 3430)}]{../R/nhl_salary_sampling.R}
+
+\end{document}
